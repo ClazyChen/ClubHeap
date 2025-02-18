@@ -1,0 +1,5 @@
+clubheap/project/
+clubheap/target/
+clubheap/test_run_dir/
+*.py
+verilog/
