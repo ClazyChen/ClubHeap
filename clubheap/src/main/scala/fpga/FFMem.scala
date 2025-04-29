@@ -28,31 +28,20 @@ class FFMem(
 
     // read the data from the memory
     val rdata = RegNext(mem(io.r.addr))
-
-    // if the read / write port access the same address
-    //    then the read data is the same as the write data
-    val same_addr = RegNext(io.r.addr === io.w.addr && io.r.en && io.w.en)
-    val wdata = RegNext(io.w.data)
-    io.r.data := Mux(same_addr, wdata, rdata)
+    val ren = RegNext(io.r.en)
+    io.r.data := Mux(ren, rdata, DontCare)
 
     // the trait of the memory
     // write the data to the memory
-    def write(addr: UInt, data: UInt): Unit = {
-        io.w.en := true.B
+    def write(addr: UInt, data: UInt, en: Bool): Unit = {
+        io.w.en := en
         io.w.addr := addr
         io.w.data := data
     }
 
-    // do not write the data to the memory
-    def no_write(): Unit = {
-        io.w.en := false.B
-        io.w.addr := DontCare
-        io.w.data := DontCare
-    }
-
     // read the data from the memory
-    def read(addr: UInt): UInt = {
-        io.r.en := true.B
+    def read(addr: UInt, en: Bool): UInt = {
+        io.r.en := en
         io.r.addr := addr
         io.r.data
     }

@@ -25,11 +25,12 @@ class WritePort(
 
 // The trait of a memory
 trait MemoryTrait {
-    def write(addr: UInt, data: UInt): Unit
-    def no_write(): Unit
-    def read(addr: UInt): UInt
+    def write(addr: UInt, data: UInt, en: Bool): Unit
+    def read(addr: UInt, en: Bool): UInt
 }
 
+// [ClubHeap+] We have a no hazard design for the memory, so it will never happen that
+//             we read and write the same address at the same time
 // The SRAM module
 class Sram(
     val data_depth: Int,
@@ -44,38 +45,23 @@ class Sram(
 
     val mem = SyncReadMem(data_depth, UInt(data_width.W))
 
-    // write the data to the memory
+    // Read data from memory when read enable is active
+    io.r.data := mem.read(io.r.addr, io.r.en)
+
+    // Write data to memory when write enable is active
     when (io.w.en) {
         mem.write(io.w.addr, io.w.data)
     }
 
-    // read the data from the memory
-    val rdata = mem.read(io.r.addr, io.r.en)
-
-    // if the read / write port access the same address
-    //    then the read data is the same as the write data
-    val same_addr = RegNext(io.r.addr === io.w.addr && io.r.en && io.w.en)
-    val wdata = RegNext(io.w.data)
-    io.r.data := Mux(same_addr, wdata, rdata)
-
-    // the trait of the memory
-    // write the data to the memory
-    def write(addr: UInt, data: UInt): Unit = {
-        io.w.en := true.B
+    // Memory trait implementation
+    def write(addr: UInt, data: UInt, en: Bool): Unit = {
+        io.w.en := en
         io.w.addr := addr
         io.w.data := data
     }
 
-    // do not write the data to the memory
-    def no_write(): Unit = {
-        io.w.en := false.B
-        io.w.addr := DontCare
-        io.w.data := DontCare
-    }
-
-    // read the data from the memory
-    def read(addr: UInt): UInt = {
-        io.r.en := true.B
+    def read(addr: UInt, en: Bool): UInt = {
+        io.r.en := en
         io.r.addr := addr
         io.r.data
     }

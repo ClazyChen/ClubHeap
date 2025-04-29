@@ -55,25 +55,6 @@ object Const {
         }
     }
 
-    // the width of memory data
-    // the accurate width of the memory data
-    def data_width(level: Int, is_dynamic: Boolean) = {
-        val K = count_of_elements_in_each_cluster
-        val is_the_last_level = level == count_of_levels
-        if (is_the_last_level) {
-            // the last level has no min_lc, min_rc, diff, and next
-            (Vec(K-1, new Entry)).getWidth
-        } else {
-            if (is_dynamic) {
-                // the dynamic memory model (default)
-                (new Cluster(level)).getWidth
-            } else {
-                // the static memory model (static cluster)
-                (new StaticCluster(level)).getWidth
-            }
-        }
-    }
-
     // the capacity of the memory (number of nodes / clusters) on a level
     // - caculated by Corollary 2 in the paper
     
@@ -82,9 +63,8 @@ object Const {
 
     // the dynamic capacity means the partitions share dynamically allocated nodes
     def dynamic_capacity(level: Int): Int = {
-        val K = count_of_elements_in_each_cluster
-        round((1.0 * K * ((1 << count_of_levels) - 1) / (
-            1.0 + K * (
+        round((count_of_max_entries.toDouble / (
+            1.0 + count_of_elements_in_each_cluster * (
                 1 - 1.0 / (1 << (level - 1))
             )
         )).toFloat)
@@ -94,7 +74,30 @@ object Const {
     def capacity(level: Int): Int = min(static_capacity(level), dynamic_capacity(level))
 
     // if the dynamic capacity is less than the static capacity, then the memory is dynamic
-    def is_dynamic(level: Int): Boolean = dynamic_capacity(level) < static_capacity(level)
+    def is_dynamic_memory(level: Int): Boolean = dynamic_capacity(level) < static_capacity(level)
+
+    // if the next level is dynamic memory, then this level should be dynamic cluster
+    def is_dynamic_cluster(level: Int): Boolean = level < count_of_levels && is_dynamic_memory(level + 1)
+
+    // the width of memory data
+    // the accurate width of the memory data
+    def data_width(level: Int) = {
+        val K = count_of_elements_in_each_cluster
+        val is_the_last_level = level == count_of_levels
+        if (is_the_last_level) {
+            // special cluster (last level)
+            // the last level has no min_lc, min_rc, diff, and next
+            (Vec(K-1, new Entry)).getWidth
+        } else {
+            if (is_dynamic_cluster(level)) {
+                // dynamic cluster
+                (new Cluster(level)).getWidth
+            } else {
+                // static cluster
+                (new StaticCluster(level)).getWidth
+            }
+        }
+    }
 
     // the memory depth of the memory on a level
     def data_depth(level: Int): Int = max(1, capacity(level) / 2)
@@ -104,4 +107,22 @@ object Const {
     // NOTE: The highest bit of the link field is used to represent null pointer
     //       (i.e. 1xxxxxx means null pointer, 0xxxxxx means valid pointer)
     def link_width(level: Int): Int = log2Ceil(data_depth(level + 1)) + 1
+
+    // extract the link from the data
+    // - static cluster: DontCare (link is not used)
+    // - dynamic cluster: the link field is the next pointer (normal levels)
+    //                    reuse the metadata field as the next pointer (last level)
+    def link(data: UInt, level: Int): UInt = {
+        val K = count_of_elements_in_each_cluster
+        val is_the_last_level = level == count_of_levels
+        if (is_the_last_level) {
+            data.asTypeOf(Vec(K-1, new Entry))(0).metadata
+        } else {
+            if (is_dynamic_cluster(level)) {
+                data.asTypeOf(new Cluster(level)).next
+            } else {
+                data.asTypeOf(new StaticCluster(level)).entries(0).metadata
+            }
+        }
+    }
 }
