@@ -1,222 +1,138 @@
-// package fpga
+package fpga
 
-// import chisel3._
-// import chisel3.util._
+import chisel3._
+import chisel3.util._
+import fpga.UIntExt._
 
-// // The memory module of one level of the heap
-// //     including a sister memory for nodes at the same level
-// // read port:
-// // - ren_in: read enable signal
-// // - raddr_in: the address of the entry to read
-// //             if the address is invalid, then allocate a new entry in the sister memory
-// // - rdata_lc_out: the data of the left child (Cluster)
-// // - rdata_rc_out: the data of the right child (Cluster)
-// // - raddr_actual_out: the address of the entry actually read
-// //             if raddr_in is a valid pointer, then raddr_actual_out = raddr_in
-// //             if raddr_in is invalid, then raddr_actual_out is the address of the allocated entry
-// // write port:
-// // - wen_in: write enable signal
-// // - waddr_in: the address of the entry to write
-// // - wdata_lc_in: the data of the left child (Cluster)
-// // - wdata_rc_in: the data of the right child (Cluster)
-// // [ClubHeap+] no hazard design [WRITE stage]:
-// //             - we ensure that if the data of an address is still being used, then it will not be overwritten
-// //               for example, read1(addr) -> read2(addr) -> write1(addr, data1) -> write2(addr, data2)
-// //               where read1-write1 and read2-write2 are two consecutive operations which access the same address
-// //               then 1) the result of read2 will be invalid (forwarded by the result of compare1)
-// //                    2) write1 will not be performed (wen_in = false)
-// //                    3) write2 will be performed (wen_in = true) as long as there is no read3(addr) at the same time of write1
-// // [ClubHeap+] no hazard design [READ stage]:
-// //             - we ensure that if the data of an address is already being used, then it will not be read
-// //               for example, read1(addr) -> read2(addr) -> write1(addr, data1) -> write2(addr, data2)
-// //               then 1) the result of compare1 will be forwarded, as the result of read2
-// //                    2) so we don't need to actually do read2 in the memory
-// // [ClubHeap+] no hazard design [dynamic memory model]:
-// //             - if we need to allocate and free an address in the same cycle
-// //               then we directly give the address to be freed for allocation
-// //               and cancel the write operation
-// // memory data:
-// // although rdata/wdata are Cluster (with a larger width), the actual data stored in the memory is UInt
-// // - dynamic memory model: all data in Cluster are stored in UInt
-// // - static memory model: all data (excluding next) in Cluster are stored in UInt
-// // - the last level: only entries in Cluster are stored in UInt
-// class Memory(
-//     val level: Int, // the level of the memory (starting from 1)
-//     val use_ffmem: Boolean = false, // if true, use FFMem, otherwise use Sram
-// ) extends Module {
+// The memory module of one level of the heap
+//     including a sister memory for nodes at the same level
+// read port:
+// - ren_in: read enable signal
+// - raddr_in: the address of the entry to read
+//             if the address is invalid, then allocate a new entry in the sister memory
+// - rdata_lc_out: the data of the left child (Cluster)
+// - rdata_rc_out: the data of the right child (Cluster)
+// - raddr_out: the address of the entry actually read
+// write port:
+// - wen_in: write enable signal
+// - waddr_in: the address of the entry to write
+// - wdata_lc_in: the data of the left child (Cluster)
+// - wdata_rc_in: the data of the right child (Cluster)
+//
+// [ClubHeap+] introduces no hazard design as follows:
+// - we ensure that 1) if the data of an address is still being used, then it will not be overwritten
+//                  2) if the data of an address is already being used, then it will not be read
+//                  3) if we allocate and free an address in the same cycle, then we directly give the address for allocation
+//                     and cancel the write operation
 
-//     val K = Const.count_of_elements_in_each_cluster
-//     val is_the_last_level = level == Const.count_of_levels
+class Memory(
+    val level: Int, // the level of the memory (starting from 1)
+    val use_ffmem: Boolean = false, // if true, use FFMem, otherwise use Sram
+) extends Module {
 
-//     val is_dynamic_cluster = Const.is_dynamic_cluster(level)
-//     val is_dynamic_memory = Const.is_dynamic_memory(level)
+    val is_last_level = level == HeapConst.count_of_levels
+    val is_dynamic_memory = HeapConst.is_dynamic_memory(level)
 
-//     // the address width of the sister memory is the link width of the previous level
-//     val address_width = Const.link_width(level-1)
-//     def invalid_addr(addr: UInt): Bool = addr(address_width-1)
+    // the address width of the sister memory is the link width of the previous level
+    val addr_width = HeapConst.link_width(level-1)
 
-//     val io = IO(new Bundle {
-//         // read port
-//         val raddr_in = Input(UInt(address_width.W))
-//         val rdata_lc_out = Output(new Cluster(level))
-//         val rdata_rc_out = Output(new Cluster(level))
-//         val raddr_actual_out = Output(UInt(address_width.W))
+    val io = IO(new Bundle {
+        // read port
+        val ren_in = Input(Bool()) // read enable signal
+        val raddr_in = Input(UInt(addr_width.W)) // the address to read
+        val rdata_lc_out = Output(new Cluster(level)) // the data of the left child (Cluster)
+        val rdata_rc_out = Output(new Cluster(level)) // the data of the right child (Cluster)
+        val raddr_out = Output(UInt(addr_width.W)) // the address actually read
 
-//         // write port
-//         val wen_in = Input(Bool())
-//         val waddr_in = Input(UInt(address_width.W))
-//         val wdata_lc_in = Input(new Cluster(level))
-//         val wdata_rc_in = Input(new Cluster(level))
-//     })
+        // write port 
+        val wen_in = Input(Bool()) // write enable signal
+        val waddr_in = Input(UInt(addr_width.W)) // the address to write
+        val wdata_lc_in = Input(new Cluster(level)) // the data of the left child (Cluster)
+        val wdata_rc_in = Input(new Cluster(level)) // the data of the right child (Cluster)
+    })
 
-//     // the sister memory
-//     val mem = Module(new SisterMem(
-//         data_depth = Const.data_depth(level),
-//         data_width = Const.data_width(level),
-//         use_ffmem = use_ffmem,
-//         no_sister = level == 1,
-//     ))
+    // the sister memory
+    val mem = Module(new SisterMem(
+        level = level,
+        use_ffmem = use_ffmem,
+    ))
 
-//     // the free list to record the first free address
-//     val free_list = if (is_dynamic_memory) RegInit(0.U(address_width.W)) else DontCare
+    // read ports of the sister memory
+    val ren = Wire(Bool())
+    val raddr = Wire(UInt(addr_width.W))
+    val rdata_lc = Wire(new Cluster(level))
+    val rdata_rc = Wire(new Cluster(level))
+    ren := io.ren_in
+    raddr := io.raddr_in
+    rdata_lc := mem.io.rdata_lc_out
+    rdata_rc := mem.io.rdata_rc_out
 
-//     // in the dynamic memory model:
-//     // (require_allocation, require_free) =
-//     //   - (0, 0) no operation (normal update)
-//     //   - (0, 1) require free only
-//     //   - (1, 0) require allocation only
-//     //   - (1, 1) require allocation and free (directly give the address)
-//     val require_allocation = invalid_addr(io.raddr_in)
-//     val require_allocation_delay = RegNext(require_allocation)
-//     val require_free = io.wdata_lc_in.is_empty && io.wdata_rc_in.is_empty
+    // write ports of the sister memory
+    val wen = Wire(Bool())
+    val wdata_lc = Wire(new Cluster(level))
+    val wdata_rc = Wire(new Cluster(level))
+    wen := io.wen_in
+    wdata_lc := io.wdata_lc_in
+    wdata_rc := io.wdata_rc_in
 
-//     // [ClubHeap+] no hazard design:
-//     // - same address for read and write, cancel the write operation, and transfer the data
-//     // - same cycle allocation and free, cancel the write operation, and transfer the address
-//     val same_addr = io.raddr_in === io.waddr_in
-//     val same_cycle_allocation_and_free = require_allocation && require_free
-//     val wen = io.wen_in && !same_addr && !same_cycle_allocation_and_free
+    if (is_dynamic_memory) {
 
-//     // determine the address to read
-//     // - no allocation : raddr_in
-//     // - allocation and no free : free_list
-//     //   NOTE: if we have just allocated a new entry in the last cycle, the free_list has not been updated yet
-//     //         so we need to use the next field of the (just allocated) entry to get the next address to allocate
-//     //         we use the next field of the left child to build the free list
-//     // - allocation and free : io.waddr_in (directly give the address)
-//     val next_of_just_allocated = link(mem.io.rdata_lc_out)
-//     val next_addr_to_allocate = Mux(require_allocation_delay, next_of_just_allocated, free_list)
+        // is dynamic memory, use the free list, and allocation and free
+        // free list is initialized to 0
+        val free_list = RegInit(0.U(addr_width.W))
+
+        // allocation and free
+        val alloc = io.raddr_in.select_highest
+        val free = io.wdata_lc_in.is_empty && io.wdata_rc_in.is_empty
+
+        // directly give the address for allocation and free, cancel the read and write operation
+        when (alloc && free) {
+            ren := false.B
+            wen := false.B
+        }
+
+        // determine the address to read
+        // - if last cycle is allocation, then the next address is its next field 
+        // - otherwise, use the free list
+        val free_list_invalid = RegNext(alloc && !free)
+        val alloc_addr = Mux(free_list_invalid, mem.io.rdata_lc_out.next, free_list)
+
+        // determine the actual address to read
+        when (alloc) {
+            raddr := Mux(free, io.waddr_in, alloc_addr)
+        }
+
+        // if the cluster is just allocated, return an empty cluster
+        val alloc_delay = RegNext(alloc)
+        when (alloc_delay) {
+            rdata_lc := Cluster.empty(level)
+            rdata_rc := Cluster.empty(level)
+        }
+
+        // determine the actual data to write
+        when (free && !alloc) {
+            if (is_last_level) {
+                wdata_lc.entries(0).metadata := alloc_addr
+            } else {
+                wdata_lc.next := alloc_addr
+            }
+        }
+
+        // update the free list
+        free_list := Mux(free && !alloc, io.waddr_in, alloc_addr)
+    } 
     
-//     val actual_raddr = if (is_dynamic) {
-//         Mux(require_allocation,
-//             Mux(require_free, io.waddr_in, next_addr_to_allocate),
-//             io.raddr_in)
-//     } else {
-//         io.raddr_in
-//     }
+    // read logic
+    mem.io.ren_in := ren
+    mem.io.raddr_in := raddr
+    io.rdata_lc_out := rdata_lc
+    io.rdata_rc_out := rdata_rc
+    io.raddr_out := RegNext(raddr)
 
-//     io.raddr_actual_out := actual_raddr
-
-
-//     when (same_addr) {
-//         io.rdata_lc_out := io.wdata_lc_in
-//         io.rdata_rc_out := io.wdata_rc_in
-//     }
-
-//     // determine the address to read
-//     // - no allocation : raddr_in
-//     // - allocation and no free : free_list
-//     //   NOTE: if we have just allocated a new entry in the last cycle, the free_list has not been updated yet
-//     //         so we need to use the next field of the (just allocated) entry to get the next address to allocate
-//     //         we use the next field of the left child to build the free list
-    
-//     val next_of_just_allocated = link(mem.io.rdata_lc_out)
-//     val next_addr_to_allocate = Mux(require_allocation_delay, next_of_just_allocated, free_list)
-    
-//     // the address to read in actual, it is calculated in the READ stage (before the memory is read)
-//     val raddr_to_read = if (is_dynamic) (Mux(require_allocation,
-//         Mux(require_free, 
-//             io.waddr_in, 
-//             next_addr_to_allocate),
-//         io.raddr_in
-//     )) else io.raddr_in
-//     val raddr_to_read_delay = RegNext(raddr_to_read)
-//     // the actual address to read, it is calculated in the READ stage (before the memory is read)
-//     io.raddr_actual_out := raddr_to_read_delay
-    
-//     // update the free list
-//     // - allocate and free : no update (the newly freed entry is immediately allocated)
-//     // - no allocation and no free : no update
-//     // - allocate and no free : update the free list to the next field of the newly allocated entry, i.e. next_of_just_allocated
-//     // - no allocation and free : update the free list to the newly freed entry
-//     if (is_dynamic) {
-//         when (require_allocation && !require_free) {
-//             free_list := next_of_just_allocated
-//         }
-//         when (!require_allocation && require_free) {
-//             free_list := io.waddr_in
-//         }
-//     }
-
-//     // below is the read / write logic
-//     val raddr_delay = RegNext(io.raddr_in)
-
-//     // read logic
-//     mem.io.raddr_in := actual_raddr
-//     io.rdata_lc_out := DontCare
-//     io.rdata_rc_out := DontCare
-//     if (is_the_last_level) {
-//         io.rdata_lc_out.entries := mem.io.rdata_lc_out.asTypeOf(io.rdata_lc_out.entries)
-//         io.rdata_rc_out.entries := mem.io.rdata_rc_out.asTypeOf(io.rdata_rc_out.entries)
-//     } else {
-//         if (is_dynamic) {
-//             io.rdata_lc_out := mem.io.rdata_lc_out.asTypeOf(io.rdata_lc_out)
-//             io.rdata_rc_out := mem.io.rdata_rc_out.asTypeOf(io.rdata_rc_out)
-//             // a new leaf node is allocated, set the left and right children to null
-//             //       otherwise, use the next field recorded
-//             when (invalid_addr(raddr_delay)) {
-//                 io.rdata_lc_out.next := (-1).S.asUInt // -1 is the null pointer
-//                 io.rdata_rc_out.next := (-1).S.asUInt
-//             }
-//         } else {
-//             // in the static memory model, we do not need to check the empty status
-//             io.rdata_lc_out := mem.io.rdata_lc_out.asTypeOf(new StaticCluster(level)).to_dynamic
-//             io.rdata_rc_out := mem.io.rdata_rc_out.asTypeOf(new StaticCluster(level)).to_dynamic
-//             io.rdata_lc_out.next := Cat(raddr_delay, false.B)
-//             io.rdata_rc_out.next := Cat(raddr_delay, true.B)
-//         }
-//     }
-
-//     // write logic
-//     mem.io.waddr_in := io.waddr_in
-//     val wdata_lc = Wire(new Cluster(level))
-//     val wdata_rc = Wire(new Cluster(level))
-//     wdata_lc := io.wdata_lc_in
-//     wdata_rc := io.wdata_rc_in
-//     // if the node is to be freed, we add it to the front of the free list
-//     // - in the last level, use the metadata of the first entry to record the next address to allocate
-//     // - in other levels, use the next field to record the next address to allocate
-//     if (is_dynamic) {
-//         when (require_free) {
-//             if (is_the_last_level) {
-//                 wdata_lc.entries(0).metadata := next_addr_to_allocate
-//             } else {
-//                 wdata_lc.next := next_addr_to_allocate
-//             }
-//         }
-//     }
-//     if (is_the_last_level) { // only entries are written
-//         mem.io.wdata_lc_in := wdata_lc.entries.asUInt
-//         mem.io.wdata_rc_in := wdata_rc.entries.asUInt
-//     } else {
-//         if (is_dynamic) { // dynamic cluster is written
-//             mem.io.wdata_lc_in := wdata_lc.asUInt
-//             mem.io.wdata_rc_in := wdata_rc.asUInt
-//         } else { // static cluster is written
-//             mem.io.wdata_lc_in := wdata_lc.to_static.asUInt
-//             mem.io.wdata_rc_in := wdata_rc.to_static.asUInt
-//         }
-//     }
-
-// }
+    // write logic
+    mem.io.wen_in := wen
+    mem.io.waddr_in := io.waddr_in
+    mem.io.wdata_lc_in := wdata_lc
+    mem.io.wdata_rc_in := wdata_rc
+}
 

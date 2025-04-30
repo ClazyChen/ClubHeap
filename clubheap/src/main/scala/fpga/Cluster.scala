@@ -7,8 +7,8 @@ import chisel3.util._
 //     including an existing bit, a metadata, and a rank
 class Entry extends Bundle {
     val existing = Bool()
-    val metadata = UInt(Const.metadata_width.W)
-    val rank = UInt(Const.rank_width.W)
+    val metadata = UInt(HeapConst.metadata_width.W)
+    val rank = UInt(HeapConst.rank_width.W)
 }
 
 // An empty entry (as the default value of an entry)
@@ -34,7 +34,7 @@ object Entry {
 class Cluster(
     val level: Int, // the level of the cluster (starting from 1)
 ) extends Bundle {
-    val K = Const.count_of_elements_in_each_cluster
+    val K = HeapConst.count_of_elements_in_each_cluster
 
     // the entries in the cluster
     //     (excluding the first entry, which is stored in the parent cluster)
@@ -45,10 +45,10 @@ class Cluster(
     val min_rc = new Entry
 
     // the stored diff
-    val diff = UInt(Const.diff_width(level).W)
+    val diff = UInt(HeapConst.diff_width(level).W)
 
     // the stored next
-    val next = UInt(Const.link_width(level).W)
+    val next = UInt(HeapConst.link_width(level).W)
 
     // judge if the cluster is empty
     def is_empty: Bool = !(entries(0).existing)
@@ -92,10 +92,10 @@ object Cluster {
 class StaticCluster(
     val level: Int,
 ) extends Bundle {
-    val entries = Vec(Const.count_of_elements_in_each_cluster-1, new Entry)
+    val entries = Vec(HeapConst.count_of_elements_in_each_cluster-1, new Entry)
     val min_lc = new Entry
     val min_rc = new Entry
-    val diff = UInt(Const.diff_width(level).W)
+    val diff = UInt(HeapConst.diff_width(level).W)
 
     // convert the static cluster to the dynamic cluster
     def to_dynamic: Cluster = {

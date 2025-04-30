@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import scala.math._
 
-object Const {
+object HeapConst {
 
     // the width of the rank ( priority ) of each entry in the heap
     //     (i.e. log2(P) in the paper)
@@ -107,22 +107,4 @@ object Const {
     // NOTE: The highest bit of the link field is used to represent null pointer
     //       (i.e. 1xxxxxx means null pointer, 0xxxxxx means valid pointer)
     def link_width(level: Int): Int = log2Ceil(data_depth(level + 1)) + 1
-
-    // extract the link from the data
-    // - static cluster: DontCare (link is not used)
-    // - dynamic cluster: the link field is the next pointer (normal levels)
-    //                    reuse the metadata field as the next pointer (last level)
-    def link(data: UInt, level: Int): UInt = {
-        val K = count_of_elements_in_each_cluster
-        val is_the_last_level = level == count_of_levels
-        if (is_the_last_level) {
-            data.asTypeOf(Vec(K-1, new Entry))(0).metadata
-        } else {
-            if (is_dynamic_cluster(level)) {
-                data.asTypeOf(new Cluster(level)).next
-            } else {
-                data.asTypeOf(new StaticCluster(level)).entries(0).metadata
-            }
-        }
-    }
 }
