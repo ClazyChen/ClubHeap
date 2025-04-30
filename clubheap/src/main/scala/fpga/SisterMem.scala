@@ -5,19 +5,8 @@ import chisel3.util._
 
 // A memory module with two memories
 //     (storing the sister nodes in the heap)
-// - read (always read the sister nodes at the same time, but only one of them is actually used in the compare stage)
-//   - one addr port (no enable port, because the read is always enabled)
-//   - two data ports (one for each sister node)
-//   - one ren port (if false, no read operation is performed)
-// - write (can choose to not write)
-//   - one addr port
-//   - two data ports (one for each sister node)
-//   - one wen port (if false, no write operation is performed)
 // The "right" memory at the first level is not used
-class SisterMem(
-    val level: Int,
-    val use_ffmem: Boolean = false, // if true, use FFMem, otherwise use Sram
-) extends Module {
+class SisterMem(val level: Int) extends Module {
 
     // the address width
     val addr_width = HeapConst.link_width(level-1)
@@ -39,15 +28,8 @@ class SisterMem(
         val wdata_rc_in = Input(new Cluster(level))
     })
 
-    // generate one of the memories
-    def generate_memory() = if (use_ffmem) {
-        Module(new FFMem(data_depth, data_width))
-    } else {
-        Module(new Sram(data_depth, data_width))
-    }
-
-    val mem_lc = generate_memory()
-    val mem_rc = generate_memory()
+    val mem_lc = Module(new Sram(data_depth, data_width))
+    val mem_rc = Module(new Sram(data_depth, data_width))
 
     // memory structure
     // - last level: only Vec(K-1, new Entry)

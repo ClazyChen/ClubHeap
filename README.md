@@ -4,13 +4,15 @@ This repo provides the open-source ClubHeap codes. ClubHeap (Clustered Binary He
 
 ```
 Our experimental environment
-- Chisel 5.0.0
+- Chisel 6.3.0
 - sbt 1.8.2
 - Java 11.0.20
 ```
 
-If you are using a newer version, there may be compilation issues due to compatibility problems. For any other issues you encounter, feel free to ask me in the GitHub issues section.
+We are working to improve the performance of ClubHeap, so it may be different from the architectural design in NSDI 25 paper.
 
-We plan to consider providing a Verilog version for developers who are not familiar with Chisel.
+If you find this structure useful, please cite our paper:
 
-A paper introducing our design philosophy and key design elements will be published shortly thereafter.
+```
+Zhikang Chen, Haoyu Song, Zhiyu Zhang, Yang Xu, and Bin Liu. ClubHeap: A high-speed and scalable priority queue for programmable packet scheduling. In Proceedings of the 22nd USENIX Symposium on Networked Systems Design and Implementation (NSDI '25). USENIX. 2025. pages 1421-1436.
+```

@@ -71,40 +71,50 @@ object HeapConst {
     }
 
     // the capacity of the memory (number of nodes / clusters) on a level
-    def capacity(level: Int): Int = min(static_capacity(level), dynamic_capacity(level))
+    def capacity(level: Int): Int = if (level == 0) 1 else min(static_capacity(level), dynamic_capacity(level))
 
     // if the dynamic capacity is less than the static capacity, then the memory is dynamic
-    def is_dynamic_memory(level: Int): Boolean = dynamic_capacity(level) < static_capacity(level)
+    def is_dynamic_memory(level: Int): Boolean = if (level == 0) false else dynamic_capacity(level) < static_capacity(level)
 
     // if the next level is dynamic memory, then this level should be dynamic cluster
-    def is_dynamic_cluster(level: Int): Boolean = level < count_of_levels && is_dynamic_memory(level + 1)
+    def is_dynamic_cluster(level: Int): Boolean = if (level == 0) false else level < count_of_levels && is_dynamic_memory(level + 1)
 
     // the width of memory data
     // the accurate width of the memory data
     def data_width(level: Int) = {
-        val K = count_of_elements_in_each_cluster
-        val is_the_last_level = level == count_of_levels
-        if (is_the_last_level) {
-            // special cluster (last level)
-            // the last level has no min_lc, min_rc, diff, and next
-            (Vec(K-1, new Entry)).getWidth
+        if (level == 0) {
+            (new Entry).getWidth
         } else {
-            if (is_dynamic_cluster(level)) {
-                // dynamic cluster
-                (new Cluster(level)).getWidth
+            val K = count_of_elements_in_each_cluster
+            val is_the_last_level = level == count_of_levels
+            if (is_the_last_level) {
+                // special cluster (last level)
+                // the last level has no min_lc, min_rc, diff, and next
+                (Vec(K-1, new Entry)).getWidth
             } else {
-                // static cluster
-                (new StaticCluster(level)).getWidth
+                if (is_dynamic_cluster(level)) {
+                    // dynamic cluster
+                    (new Cluster(level)).getWidth
+                } else {
+                    // static cluster
+                    (new StaticCluster(level)).getWidth
+                }
             }
         }
     }
 
     // the memory depth of the memory on a level
-    def data_depth(level: Int): Int = max(1, capacity(level) / 2)
+    def data_depth(level: Int): Int = if (level <= 0) 1 else max(1, capacity(level) / 2)
 
     // the width of the link field of each entry in the heap
     //     (if using the dynamic memory model)
     // NOTE: The highest bit of the link field is used to represent null pointer
     //       (i.e. 1xxxxxx means null pointer, 0xxxxxx means valid pointer)
-    def link_width(level: Int): Int = log2Ceil(data_depth(level + 1)) + 1
+    def link_width(level: Int): Int = if (level == 0) 0 else log2Ceil(data_depth(level + 1)) + 1
+    
+    // the width of the address field of each entry in the heap
+    def addr_width(level: Int): Int = if (level == 0) 0 else link_width(level-1)
+
+    // physical address width = addr width of the previous level + 1
+    def paddr_width(level: Int): Int = if (level == 0) 0 else addr_width(level-1) + 1
 }
