@@ -9,7 +9,7 @@ import fpga.UIntExt._
 
 class Compare(val level: Int) extends Module {
 
-    val K = Const.count_of_elements_in_each_cluster
+    val K = HeapConst.count_of_elements_in_each_cluster
 
     val io = IO(new Bundle {
 
@@ -127,10 +127,10 @@ class Compare(val level: Int) extends Module {
         // in push operation, min_lc | min_rc may be updated from the overflow entry
         // only updated when 1) selected and 2) the overflow entry is smaller
         val overflow_entry = Mux(cmp(K-2), data.entries(K-2), io.op_prev_in.push)
-        when (cmp_min_lc && !io.cdata_in.diff.select_highest) {
+        when (cmp_min_lc && !data.diff.select_highest) {
             new_data.min_lc := overflow_entry
         }
-        when (cmp_min_rc && io.cdata_in.diff.select_highest) {
+        when (cmp_min_rc && data.diff.select_highest) {
             new_data.min_rc := overflow_entry
         }
     }
@@ -162,7 +162,7 @@ class Compare(val level: Int) extends Module {
     val sc_next = Mux(
         io.op_prev_in.pop,
         !cmp_lc_rc, // 1 when min_lc < min_rc, lc is selected
-        !io.cdata_in.diff.select_highest // 1 when diff < 0, lc is selected
+        !data.diff.select_highest // 1 when diff < 0, lc is selected
     )
     io.cp.sc := RegNext(sc)
     io.cp.sc_next := RegNext(sc_next)
@@ -175,10 +175,10 @@ class Compare(val level: Int) extends Module {
     val op_next = Wire(new Operator)
     op_next := io.op_prev_in
     when (!sc_next && cmp_min_lc) {
-        op_next.push := io.cdata_in.min_lc
+        op_next.push := data.min_lc
     }
     when (sc_next && cmp_min_rc) {
-        op_next.push := io.cdata_in.min_rc
+        op_next.push := data.min_rc
     }
     io.cp.op_next := RegNext(op_next)
 
@@ -189,5 +189,9 @@ class Compare(val level: Int) extends Module {
     io.cp.data.data_rc := RegNext(Mux(
         !sc, c.data_rc, new_data
     ))
+
+    // directly transfer the address and paddr
+    io.cp.data.addr := RegNext(c.addr)
+    io.cp.data.paddr := RegNext(c.paddr)
 }
 

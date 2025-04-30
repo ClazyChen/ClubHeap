@@ -17,13 +17,13 @@ class Write(val level: Int) extends Module {
         val pw = Input(new Stash(level))
 
         // ports to the memory
-        val mem = Flipped(new WriteMemIO)
+        val mem = Flipped(new WriteMemIO(level))
     })
 
     io.w_fwd <> io.pw
 
     io.mem.wen <> io.wen_in
-    io.mem.waddr_raw <> io.pw.addr
+    io.mem.waddr <> io.pw.addr
     io.mem.wdata_lc <> io.pw.data_lc
     io.mem.wdata_rc <> io.pw.data_rc
 }

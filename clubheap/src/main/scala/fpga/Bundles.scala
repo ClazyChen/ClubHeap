@@ -4,18 +4,18 @@ import chisel3._
 import chisel3.util._
 
 // Read-Memory IO
-class ReadMemIO extends Bundle {
+class ReadMemIO(val level: Int) extends Bundle {
     val ren = Input(Bool())
-    val raddr_raw = Input(UInt(addr_width.W))
+    val raddr_raw = Input(UInt(HeapConst.addr_width(level).W))
     val rdata_lc = Output(new Cluster(level))
     val rdata_rc = Output(new Cluster(level))
-    val raddr = Output(UInt(addr_width.W))
+    val raddr = Output(UInt(HeapConst.addr_width(level).W))
 }
 
 // Write-Memory IO
-class WriteMemIO extends Bundle {
+class WriteMemIO(val level: Int) extends Bundle {
     val wen = Input(Bool())
-    val waddr = Input(UInt(addr_width.W))
+    val waddr = Input(UInt(HeapConst.addr_width(level).W))
     val wdata_lc = Input(new Cluster(level))
     val wdata_rc = Input(new Cluster(level))
 }
@@ -49,7 +49,7 @@ class InterLevelIO(val level: Int) extends Bundle {
 
 // Top-level ports
 class PQIO extends Bundle {
-    val queue_id_in = Input(UInt(log2Ceil(Const.count_of_partitions).W))
+    val queue_id_in = Input(UInt(log2Ceil(HeapConst.count_of_partitions).W))
     val op_in = Input(new Operator)
     val entry_out = Output(new Entry)
 }

@@ -20,8 +20,8 @@ class Memory(val level: Int) extends Module {
     val addr_width = HeapConst.addr_width(level)
 
     val io = IO(new Bundle {
-        val read = new ReadMemIO
-        val write = new WriteMemIO
+        val read = new ReadMemIO(level)
+        val write = new WriteMemIO(level)
     })
 
     // The sister memory

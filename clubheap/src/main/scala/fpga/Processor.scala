@@ -14,21 +14,18 @@ import chisel3.util._
 
 class Processor(val level: Int) extends Module {
 
-    val addr_width = HeapConst.addr_width(level)
-    val paddr_width = HeapConst.paddr_width(level)
-
     val io = IO(new Bundle {
         val prev = new InterLevelIO(level)
         val next = Flipped(new InterLevelIO(level+1))
     })
 
     // stages, memory, and forwarding
-    val read = new Read(level)
-    val compare = new Compare(level)
-    val prepare = new Prepare(level)
-    val write = new Write(level)
-    val mem = new Memory(level)
-    val fwd = new Forwarding(level)
+    val read = Module(new Read(level))
+    val compare = Module(new Compare(level))
+    val prepare = Module(new Prepare(level))
+    val write = Module(new Write(level))
+    val mem = Module(new Memory(level))
+    val fwd = Module(new Forwarding(level))
 
     // inter-level connections (to previous level)
     read.io.addr_prev_in <> io.prev.addr

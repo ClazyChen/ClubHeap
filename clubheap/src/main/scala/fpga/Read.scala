@@ -19,7 +19,7 @@ class Read(val level: Int) extends Module {
         val ren_in = Input(Bool())
 
         // ports to memory
-        val mem = Flipped(new ReadMemIO)
+        val mem = Flipped(new ReadMemIO(level))
 
         // ports to the CMP stage at this level
         val rc = Output(new Stash(level))
